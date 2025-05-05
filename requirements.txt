@@ -1,6 +1,8 @@
 streamlit
 pandas
 matplotlib
+scikit-learn
+tensorflow
 google-generativeai
 python-dotenv
-reportlab
+fpdf
