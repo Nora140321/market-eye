@@ -2,14 +2,15 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+
 from models.lstm_model import predict_next_day_price
 from models.gemini_recommender import generate_recommendation
 from models.pdf_report import create_pdf_report
-import os
 
 st.set_page_config(page_title="Market Eye", layout="wide")
 
-# Load cleaned stock data
+# Load data
 DATA_PATH = os.path.join("data", "cleaned_stock_data.csv")
 if not os.path.exists(DATA_PATH):
     st.error("❌ Data file not found. Please run the data cleaning script first.")
@@ -17,7 +18,7 @@ if not os.path.exists(DATA_PATH):
 
 df = pd.read_csv(DATA_PATH, parse_dates=["Date"])
 
-# Sidebar: Login or Signup
+# User authentication
 st.sidebar.header("User Access")
 action = st.sidebar.radio("Select Action", ["Login", "Sign Up"])
 
@@ -37,7 +38,7 @@ if action == "Login":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        if "Username" in credentials_df.columns and "Password" in credentials_df.columns:
+        try:
             match = credentials_df[
                 (credentials_df["Username"] == username) & (credentials_df["Password"] == password)
             ]
@@ -48,15 +49,16 @@ if action == "Login":
                 st.experimental_rerun()
             else:
                 st.error("Invalid credentials.")
-        else:
-            st.error("⚠️ Credentials file is missing required columns.")
+        except KeyError:
+            st.error("⚠️ Credentials file is missing or malformed.")
+
 elif action == "Sign Up":
     st.subheader("📝 Sign Up")
     new_user = st.text_input("New Username")
     new_pass = st.text_input("New Password", type="password")
     if st.button("Register"):
         if new_user and new_pass:
-            if "Username" in credentials_df.columns and new_user in credentials_df["Username"].values:
+            if new_user in credentials_df["Username"].values:
                 st.warning("Username already exists.")
             else:
                 new_entry = pd.DataFrame([[new_user, new_pass]], columns=["Username", "Password"])
@@ -74,7 +76,7 @@ if st.session_state.logged_in:
         st.session_state.username = ""
         st.experimental_rerun()
 
-# Main Dashboard
+# Dashboard
 if st.session_state.logged_in:
     st.title("📊 Market Eye Dashboard")
 
@@ -94,11 +96,12 @@ if st.session_state.logged_in:
     ax.set_ylabel("Price ($)")
     st.pyplot(fig)
 
-    # Save chart as image for PDF
+    # Save chart image
     chart_path = os.path.join("reports", f"{selected_ticker}_chart.png")
     os.makedirs("reports", exist_ok=True)
     fig.savefig(chart_path)
 
+    # Quick stats
     st.subheader("📊 Quick Stats")
     max_close = ticker_df["Close"].max()
     min_close = ticker_df["Close"].min()
@@ -107,10 +110,12 @@ if st.session_state.logged_in:
     st.markdown(f"**Min Close:** ${min_close:.2f}")
     st.markdown(f"**Average Close:** ${avg_close:.2f}")
 
+    # Prediction
     st.subheader("🧠 LSTM Forecast (Next Day Closing Price)")
     predicted_price = predict_next_day_price(ticker_df)
     st.success(f"✅ Predicted Next Close: ${predicted_price:.2f}")
 
+    # Gemini Recommendation
     st.subheader("💬 Gemini Recommendation")
     recommendation = generate_recommendation(
         ticker=selected_ticker,
@@ -124,6 +129,7 @@ if st.session_state.logged_in:
     else:
         st.info(recommendation)
 
+    # PDF Report
     st.subheader("📄 Downloadable PDF Report")
     if st.button("Generate PDF Report"):
         pdf_path = create_pdf_report(
